@@ -1,0 +1,52 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: dropbox-secret
+type: Opaque
+data:
+  DROPBOX_CLIENT_ID: MXdqbzEzczFtNTZxM2ky
+  DROPBOX_CLIENT_SECRET: OGlmejZndGt0eXR1N2h2
+  DROPBOX_REFRESH_TOKEN: cXF5N2g1YXhwRG9BQUFBQUFBQUFBZWtGRFNhdEZDeDBuUGRGZEd1V3dDNTVIcEQ2ZjdDRDdYZG42VjBrTU1xRg==
+  DROPBOX_ACCESS_TOKEN: c2wuQnZRYXg5UWFpOHRNcGVBSmp5Ti1nSGd5UTFmMHB6THQ5Y1REa3haRWNVY204MDZCZTBOa3B5WnJDVXNONC1JTTIxNXREQS1zRWJvYzFMZWpNQjUxSzdRLWhMb1FIbEYyMmU5a2FnWkM2MXN3QWFYVjE0U0lxeFdySkZ4ZTg2SDVBLXFYejgyeE51Rlpib29VMlJPN1JMcw==
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: image-processing
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: image-processing-microservice
+  template:
+    metadata:
+      labels:
+        app: image-processing-microservice
+    spec:
+      containers:
+      - name: image-processing-microservice
+        image: registry.gitlab.com/s.marotta10/cloud-kubernetes/image-processing-microservice:$CI_COMMIT_SHORT_SHA
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - secretRef:
+            name: dropbox-secret
+        resources:
+          limits:
+            cpu: "1"
+            memory: "512Mi"
+          requests:
+            cpu: "1"
+            memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: image-backend
+spec:
+  selector:
+    app: image-processing-microservice
+  ports:
+    - protocol: TCP
+      port: 3000
+      targetPort: 3000

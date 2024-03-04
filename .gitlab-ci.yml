@@ -1,0 +1,106 @@
+variables:
+  KUBE_CONTEXT: s.marotta10/k8s-connection
+
+stages:
+  - build
+  - deploy
+
+before_script:
+  - echo "Setting up environment..."
+
+.build_and_push_image: &build_and_push_image
+  image: docker:latest
+  stage: build
+  services:
+    - docker:dind
+  script:
+    - cd ${CI_JOB_NAME}
+    #Login al Gitlab Container Registry
+    - docker login -u gitlab-ci-token -p $CI_JOB_TOKEN $CI_REGISTRY
+    #Build un immagine con il tag preso precedentemente e uno con il tag latest
+    - docker build -t $CI_REGISTRY_IMAGE/$CI_JOB_NAME:$CI_COMMIT_SHORT_SHA .
+    #Pushiamo le immagini create sul Gitlab Container Registry
+    - docker push $CI_REGISTRY_IMAGE/$CI_JOB_NAME:$CI_COMMIT_SHORT_SHA
+    - cd ..
+
+
+.deploy_to_kubernetes: &deploy_to_kubernetes
+  stage: deploy
+  image:
+    name: bitnami/kubectl:latest
+    entrypoint: ['']
+  script:
+    - kubectl config get-contexts
+    - kubectl config use-context $KUBE_CONTEXT:k8s-connection
+    - kubectl get pods
+    - kubectl get nodes -o wide
+    - sed -i "s/\$CI_COMMIT_SHORT_SHA/${CI_COMMIT_SHORT_SHA}/g" $CI_PROJECT_DIR/kubernetes/$CI_JOB_NAME/*.yaml
+    - kubectl apply -f $CI_PROJECT_DIR/kubernetes/$CI_JOB_NAME/.
+    - kubectl get pods
+    - kubectl get svc
+
+
+job_microservice_1:
+  <<: *build_and_push_image
+  variables:
+    CI_JOB_NAME: "frontend-microservice"
+  only:
+    changes:
+      - frontend-microservice/**/*
+
+job_microservice_2:
+  <<: *build_and_push_image
+  variables:
+    CI_JOB_NAME: "image-processing-microservice"
+  only:
+    changes:
+      - image-processing-microservice/**/*
+
+job_microservice_3:
+  <<: *build_and_push_image
+  variables:
+    CI_JOB_NAME: "login-microservice"
+  only:
+    changes:
+      - login-microservice/**/*
+
+job_microservice_4:
+  <<: *build_and_push_image
+  variables:
+    CI_JOB_NAME: "products-microservice"
+  only:
+    changes:
+      - products-microservice/**/*
+
+deploy_microservice_1:
+  <<: *deploy_to_kubernetes
+  variables:
+    CI_JOB_NAME: "frontend-microservice"
+  only:
+    changes:
+      - frontend-microservice/**/*
+
+deploy_microservice_2:
+  <<: *deploy_to_kubernetes
+  variables:
+    CI_JOB_NAME: "image-processing-microservice"
+  only:
+    changes:
+      - image-processing-microservice/**/*
+
+deploy_microservice_3:
+  <<: *deploy_to_kubernetes
+  variables:
+    CI_JOB_NAME: "login-microservice"
+  only:
+    changes:
+      - login-microservice/**/*
+
+deploy_microservice_4:
+  <<: *deploy_to_kubernetes
+  variables:
+    CI_JOB_NAME: "products-microservice"
+  only:
+    changes:
+      - products-microservice/**/*
+

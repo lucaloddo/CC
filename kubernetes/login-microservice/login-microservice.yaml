@@ -1,0 +1,121 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: login-secrets
+data:
+  MONGO_INITDB_ROOT_USERNAME: cm9vdA==
+  MONGO_INITDB_ROOT_PASSWORD: MTIzNDU2
+  JWT: aHZkdmF5NmVydDcyODM5Mjg5KClhaXlnOHQ4N3F0NzIzOTMyOTM4ODN1aGVmaXVoNzh0dHEzaWZpNzgyNzJqYmtqP1tdXXBvdTg5eXdl
+  DB_USER: cm9vdA==
+  DB_PASSWORD: MTIzNDU2
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-service
+spec:
+  selector:
+    app: mongodb
+  clusterIP: None
+  ports:
+  - protocol: TCP
+    port: 27017
+    targetPort: 27017
+---
+apiVersion: v1
+data:
+  create_db.js: "db.createCollection(\"UserInfo\")\r\ndb.UserInfo.insert({\"fname\":
+    \"Giuseppe\", \"lname\": \"Verdi\", \"email\": \"verdi@gmail.com\", \"password\":
+    \"$2a$10$KieZqLW/vdU31tmj7KmS6OniCqBEDucCbjUG9ky3nwpE3qImVJtCq\"})"
+kind: ConfigMap
+metadata:
+  name: mongo-initdb
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+spec:
+  serviceName: "mongodb-service"
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongodb
+  template:
+    metadata:
+      labels:
+        app: mongodb
+    spec:
+      containers:
+      - name: mongo
+        image: mongo:latest
+        env:
+        - name: MONGO_INITDB_DATABASE
+          value: 'login_db'
+        envFrom:
+          - secretRef:
+              name: login-secrets
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: mongo-initdb
+          mountPath: /docker-entrypoint-initdb.d/
+        - name: mongo-data
+          mountPath: /data/db
+      volumes:
+      - name: mongo-initdb
+        configMap:
+          name: mongo-initdb
+      - name: mongo-data
+  volumeClaimTemplates:
+  - metadata:
+      name: mongo-data-claim
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: node-login
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: node-login
+  template:
+    metadata:
+      labels:
+        app: node-login
+    spec:
+      containers:
+      - name: node-login
+        image: registry.gitlab.com/s.marotta10/cloud-kubernetes/login-microservice:$CI_COMMIT_SHORT_SHA
+        env:
+          - name: DB_HOST
+            value: 'mongodb-service'
+          - name: DB_NAME
+            value: 'login_db'
+          - name: DB_PORT
+            value: '27017'
+          - name: NODE_DOCKER_PORT
+            value: '6868'
+        envFrom:
+          - secretRef:
+              name: login-secrets
+        ports:
+        - containerPort: 6868
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: login-backend
+spec:
+  selector:
+    app: node-login
+  ports:
+  - protocol: TCP
+    port: 6868
+    targetPort: 6868
